@@ -6,7 +6,7 @@
 
 This is part of the second project in the 30-day DevOps challenge! 
 
-In this project, we will build an event-driven system to deliver real-time game notifications for La Liga's Soccer competition. Using Amazon EventBridge, we’ll capture events and trigger automated workflows powered by AWS Lambda. Notifications will be sent via email or text messages through Amazon SNS. Game data will be fetched dynamically from the Sportsdata API, ensuring accurate and timely queries for every event! 🌟
+In this project, I built an event-driven system to deliver real-time game notifications for La Liga's Soccer competition. Using Amazon EventBridge, we’ll capture events and trigger automated workflows powered by AWS Lambda. Notifications will be sent via email or text messages through Amazon SNS. Game data will be fetched dynamically from the Sportsdata API, ensuring accurate and timely queries for our Soccer event! 🌟
 
 
 <h2>Environments and Technologies Used</h2>
@@ -257,4 +257,4 @@ cd gamedaynotifications
 
 <h2>Conclusion</h2>
 
-Through this project, 
+Through this project, you can create real-time events for game notifications using the SportsDataIO API where we can tell the score, formation, and even specifics for timeframe. You can apply this project to several other sports, including tennis, NBA and NFL!
