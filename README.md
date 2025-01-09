@@ -4,8 +4,9 @@
   
 ## ☁️ 30 Days DevOps Challenge - La Liga Game Day Notifications / Sports Alerts System  ☁️
 
-This is part of the second project in the 30-day DevOps challenge!
-In this project, we will create a  🌟
+This is part of the second project in the 30-day DevOps challenge! 
+
+In this project, we will build an event-driven system to deliver real-time game notifications for La Liga's Soccer competition. Using Amazon EventBridge, we’ll capture events and trigger automated workflows powered by AWS Lambda. Notifications will be sent via email or text messages through Amazon SNS. Game data will be fetched dynamically from the Sportsdata API, ensuring accurate and timely queries for every event! 🌟
 
 
 <h2>Environments and Technologies Used</h2>
@@ -15,38 +16,36 @@ In this project, we will create a  🌟
   - Amazon Eventbridge
   - Amazon SNS
   - Sportsdata API
+  - gitpod
 
 
 
   
 <h2>Real World applications</h2>  
 
+🏀 Sports Fan Alerts:
+- Get instant notifications about your favorite team's game updates, like goals, touchdowns, or final scores!
+  
+🕹️ Esports Notifications:
+- Stay updated on live esports tournaments, match results, and player stats in real time.
+
+💼 Business Applications:
+- Sports media companies can use this system to send live updates to their subscribers or boost audience engagement.
 
 
 
 
 <h2>Step by Step Instructions</h2>
 
-***1. Repo and Dependencies configuration***
+***1. Repo and API configuration***
 
-We will begin by setting up the environment and code that we will be utilizing. In this instance, we will use gitpod to create a new workspace and do the commands from there.
+We will begin by setting up the environment and code that we will be utilizing. In this instance, we will use gitpod to create a new workspace and do the commands from there. We will be setting up an account with sportsdata API in order to get our API KEY to be used in our end. 
 
-   ![image](/assets/image1.png)
+![image](/assets/image2.png)
 
-We will then give dependencies into the `requirements.txt` file.
 
-```
-echo "boto3==1.26.137" >> requirements.txt
-echo "python.dotenv==1.0.0" >> requirements.txt
-echo "requests==2.28.2" >> requirements.txt
-```
-After that, we start installing the dependencies:
 
-```
-pip install -r requirements.txt
-```
-
-***2. AWS CLI Setup***
+***2. AWS CLI Setup and IAM Role creation***
 
 NOTE: Keep in mind this is for a Linux environment, check the AWS documentation to install it in your supported Os.
 
@@ -61,146 +60,200 @@ We then do `AWS configure` and enter our access and secret key along with the re
 aws sts get-caller-identity
 ```
 
-***Set .env variables***
+For IAM roles, we want to make sure we get lambda and eventbridge roles to be used for this. We will be using CLI commands. 
 
-We will now create the .env variables with the Api key generated from Open Weather along with the name of the bucket. Make sure these are set so that code can run correctly.
+```
+aws iam create-role \
+    --role-name LambdaEventBridgeFullAccessRole \
+    --assume-role-policy-document '{
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {
+                    "Service": "lambda.amazonaws.com"
+                },
+                "Action": "sts:AssumeRole"
+            }
+        ]
+    }'
+```
 
+This will create the roles with inline trust policy. Next, we will attach them to the role.
+
+```
+# Attach AWSLambda_FullAccess policy
+aws iam attach-role-policy \
+    --role-name LambdaEventBridgeFullAccessRole \
+    --policy-arn arn:aws:iam::aws:policy/AWSLambda_FullAccess
+
+# Attach AmazonEventBridgeFullAccess policy
+aws iam attach-role-policy \
+    --role-name LambdaEventBridgeFullAccessRole \
+    --policy-arn arn:aws:iam::aws:policy/AmazonEventBridgeFullAccess
+```
+
+Lastly, we will confirm role access.
+
+```
+aws iam list-attached-role-policies --role-name LambdaEventBridgeFullAccessRole
+```
+
+We can also check in the AWS console.
+
+![image](/assets/image1.png)
+
+***3. Create SNS Topic and create a JSON policy***
+
+Next, we will be creating the SNS topic along with creating the subscription for the topic and the JSON policy for publish!
+
+```
+aws sns create-topic --name gd_topic
+```
+
+It will display the ARN of the topic.
+
+![image](/assets/image3.png)
+
+Then, we will create a subscription with an Email and SMS protocol. Replace arn with user-generated topic arn as well as the email to be subscribed to and phone number.
+
+```
+aws sns subscribe \
+    --topic-arn arn:aws:sns:us-east-1:123456789012:gd_topic \
+    --protocol email \
+    --notification-endpoint youremail.com
+```
+
+```
+aws sns subscribe \
+    --topic-arn arn:aws:sns:us-east-1:123456789012:gd_topic \
+    --protocol sms \
+    --notification-endpoint yourphonenumber
+```
+You can check the subscriptions on the CLI(Replace the topic ARN) or in the console.
+
+```
+aws sns list-subscriptions-by-topic \
+    --topic-arn arn:aws:sns:us-east-1:123456789012:gd_topic
 
 ```
 
-echo "OPENWEATHER_API_KEY=yourapikey" >> .env
-echo "AWS_BUCKET_NAME=weather-dashboard-${RANDOM}" >> .env
+![image](/assets/image4.png)
+
+
+This is how it will look like in the console.
+
+![image](/assets/image5.png)
+
+Next, we will create the sns publish policy.
 
 ```
-
-***4. Setting up our python code***
-
-We will then set up the variables for our API. We will import our dependencies first:
-
-```
-import os
-import json
-import boto3
-import requests
-from datetime import datetime
-from dotenv import load_dotenv
-```
-
-Then, we will create our environment variables:
-
-```
-# Load environment variables
-load_dotenv()
-
-class WeatherDashboard:
-    def __init__(self):
-        self.api_key = os.getenv('OPENWEATHER_API_KEY')
-        self.bucket_name = os.getenv('AWS_BUCKET_NAME')
-        self.s3_client = boto3.client('s3')
-```
-NOTE: `OPENWEATHER_API_KEY` needs to be setup beforehand so that the API will fetch the data
-
-With this part we are defining the api key and bucket name of our created bucket in S3 along with interaction with boto3 (the AWS SDK for python).
-
-Next, defining creation if bucket if one has not been created yet (along with error handling) and fetching weather data from OpenWeather API:
-
-```
-def create_bucket_if_not_exists(self):
-        """Create S3 bucket if it doesn't exist"""
-        try:
-            self.s3_client.head_bucket(Bucket=self.bucket_name)
-            print(f"Bucket {self.bucket_name} exists")
-        except:
-            print(f"Creating bucket {self.bucket_name}")
-        try:
-            # Simpler creation for us-east-1
-            self.s3_client.create_bucket(Bucket=self.bucket_name)
-            print(f"Successfully created bucket {self.bucket_name}")
-        except Exception as e:
-            print(f"Error creating bucket: {e}")
-
-    def fetch_weather(self, city):
-        """Fetch weather data from OpenWeather API"""
-        base_url = "http://api.openweathermap.org/data/2.5/weather"
-        params = {
-            "q": city,
-            "appid": self.api_key,
-            "units": "imperial"
-        }
-        
-        try:
-            response = requests.get(base_url, params=params)
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.RequestException as e:
-            print(f"Error fetching weather data: {e}")
-            return None
+aws iam create-policy \
+    --policy-name gd_sns_policy \
+    --policy-document '{
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": "sns:Publish",
+                "Resource": "arn:aws:sns:us-east-1:123456789012:gd_topic"
+            }
+        ]
+    }'
 ```
 
-Lastly, we will define the variables for the weather and cities data of the API as well as making sure data gets saved to the S3 bucket:
+We can check if it was created successfully.
 
 ```
-def save_to_s3(self, weather_data, city):
-        """Save weather data to S3 bucket"""
-        if not weather_data:
-            return False
-            
-        timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
-        file_name = f"weather-data/{city}-{timestamp}.json"
-        
-        try:
-            weather_data['timestamp'] = timestamp
-            self.s3_client.put_object(
-                Bucket=self.bucket_name,
-                Key=file_name,
-                Body=json.dumps(weather_data),
-                ContentType='application/json'
-            )
-            print(f"Successfully saved data for {city} to S3")
-            return True
-        except Exception as e:
-            print(f"Error saving to S3: {e}")
-            return False
-
-def main():
-    dashboard = WeatherDashboard()
-    
-    # Create bucket if needed
-    dashboard.create_bucket_if_not_exists()
-    
-    cities = ["Orlando", "Nashville", "Chicago"]
-    
-    for city in cities:
-        print(f"\nFetching weather for {city}...")
-        weather_data = dashboard.fetch_weather(city)
-        if weather_data:
-            temp = weather_data['main']['temp']
-            feels_like = weather_data['main']['feels_like']
-            humidity = weather_data['main']['humidity']
-            description = weather_data['weather'][0]['description']
-            
-            print(f"Temperature: {temp}°F")
-            print(f"Feels like: {feels_like}°F")
-            print(f"Humidity: {humidity}%")
-            print(f"Conditions: {description}")
-            
-            # Save to S3
-            success = dashboard.save_to_s3(weather_data, city)
-            if success:
-                print(f"Weather data for {city} saved to S3!")
-        else:
-            print(f"Failed to fetch weather data for {city}")
-
-if __name__ == "__main__":
-    main()
+aws iam list-policies --query "Policies[?PolicyName=='gd_sns_policy']"
 ```
 
-***4. Final Result***
-
-
+Finally, we will attach permissions to the SNS policy. "myrole" will be exchanged by the role created and we will set the policy arn of the previously created gd_sns_policy.
 
 ```
+aws iam attach-role-policy \
+    --role-name myrole \
+    --policy-arn arn:aws:iam::123456789012:policy/gd_sns_policy
+```
+
+
+
+***4. Deploy Lambda Function***
+
+In this step, we will create the function in the AWS console for easy of use selecting author from scratch with the name `gd_notifications` and Python 3.x as the runtime, as well as get the role assigned to the function.
+
+![image](/assets/image6.png)
+
+
+
+***5. Automation Set up with Amazon Eventbridge***
+
+In this step, we will be setting up automation with amazon eventbridge to be connected with out lambda function `gd_notifications`
+
+```
+aws events put-rule \
+    --name "HourlyUpdateRule" \
+    --schedule-expression "cron(0 * * * ? *)" \
+    --state "ENABLED" \
+    --description "Triggers gd_notifications function every hour"
+```
+
+We will then set the lambda function as target for the rule.
+
+```
+aws events put-targets \
+    --rule "HourlyUpdateRule" \
+    --targets "Id"="1","Arn"="arn:aws:lambda:<REGION>:<ACCOUNT_ID>:function:gd_notifications"
+```
+
+Lastly, making sure that EventBridge is invoking functions correctly with lambda.
+
+```
+aws lambda add-permission \
+    --function-name gd_notifications \
+    --principal events.amazonaws.com \
+    --statement-id "EventBridgeInvokePermission" \
+    --action "lambda:InvokeFunction" \
+    --source-arn "arn:aws:events:<REGION>:<ACCOUNT_ID>:rule/HourlyUpdateRule"
+```
+
+
+***6. Final Result.***
+We open the function and copy-paste the code from the repository (or you can fine-tune to your liking and modify)
+
+![image](/assets/image7.png)
+
+Before we deploy the function though, we set the environment variables.
+
+![image](/assets/image7.png)
+
+Finally, we test the result by creating a test event and testing it out.
+
+![image](/assets/image9.png)
+![image](/assets/image10.png)
+
+And Voila! We now have the data with the names of the team, the score, and even the formations!
+
+![image](/assets/image11.png)
+
+NOTE: If there are no matches in a current date, for example, it can get no data therefore showing notifications like these:
+
+![image](/assets/image12.png)
+
+NOTE2: When there is a lot of date involved, we might need to adjust the timeout so that the SNS i published with this command:
+
+```
+aws lambda update-function-configuration --function-name gd_notifications --timeout 30
+```
+
  ---
+
+<h2>How to Clone Repository</h2>
+
+```
+git clone https://github.com/nilsojc/gamedaynotifications.git
+cd gamedaynotifications
+```
 
 <h2>Conclusion</h2>
 
