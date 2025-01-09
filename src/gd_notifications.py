@@ -5,6 +5,7 @@ import boto3
 from datetime import datetime, timedelta, timezone
 
 def format_game_data(game):
+    # Extract relevant information from the game
     status = game.get("Status", "Unknown")
     away_team = game.get("AwayTeam", "Unknown")
     home_team = game.get("HomeTeam", "Unknown")
@@ -54,16 +55,17 @@ def lambda_handler(event, context):
     sns_topic_arn = os.getenv("SNS_TOPIC_ARN")
     sns_client = boto3.client("sns")
     
-    # Adjust for Central Time (UTC-6)
-    utc_now = datetime.now(timezone.utc)
-    central_time = utc_now - timedelta(hours=6)  # Central Time is UTC-6
-    today_date = central_time.strftime("%Y-%m-%d")
+    # Define the fixed date (December 21st, 2024)
+    date = "2024-12-21"  # Fixed date
     
-    print(f"Fetching games for date: {today_date}")
+    # Define the competition (e.g., "La Liga")
+    competition = "ESP"  # Change this to the desired competition (e.g., "PremierLeague")
+
+    print(f"Fetching games for competition: {competition} on date: {date}")
     
-    # Fetch data from the API
-    api_url = f"https://api.sportsdata.io/v3/nba/scores/json/GamesByDate/{today_date}?key={api_key}"
-    print(today_date)
+    # Fetch data from the API with the fixed date
+    api_url = f"https://api.sportsdata.io/v4/soccer/scores/json/GamesByDateFinal/{competition}/{date}?key={api_key}"
+    print(f"API URL: {api_url}")
      
     try:
         with urllib.request.urlopen(api_url) as response:
@@ -71,7 +73,12 @@ def lambda_handler(event, context):
             print(json.dumps(data, indent=4))  # Debugging: log the raw data
     except Exception as e:
         print(f"Error fetching data from API: {e}")
-        return {"statusCode": 500, "body": "Error fetching data"}
+        return {"statusCode": 500, "body": f"Error fetching data: {e}"}
+    
+    # Check if the response has the expected structure
+    if not isinstance(data, list):  # If the data isn't a list (i.e., no games found or incorrect format)
+        print("API response is not a list or games data is missing.")
+        return {"statusCode": 400, "body": "Invalid data received from the API."}
     
     # Include all games (final, in-progress, and scheduled)
     messages = [format_game_data(game) for game in data]
@@ -82,11 +89,11 @@ def lambda_handler(event, context):
         sns_client.publish(
             TopicArn=sns_topic_arn,
             Message=final_message,
-            Subject="La Liga Game Updates"
+            Subject="Game Updates"
         )
         print("Message published to SNS successfully.")
     except Exception as e:
         print(f"Error publishing to SNS: {e}")
-        return {"statusCode": 500, "body": "Error publishing to SNS"}
+        return {"statusCode": 500, "body": f"Error publishing to SNS: {e}"}
     
-    return {"statusCode": 200, "body": "Data processed and sent to SNS"}
+    return {"statusCode": 200, "body": ""}
