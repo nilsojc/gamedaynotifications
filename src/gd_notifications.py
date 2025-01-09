@@ -7,45 +7,44 @@ from datetime import datetime, timedelta, timezone
 def format_game_data(game):
     # Extract relevant information from the game
     status = game.get("Status", "Unknown")
-    away_team = game.get("AwayTeam", "Unknown")
-    home_team = game.get("HomeTeam", "Unknown")
+    away_team_name = game.get("AwayTeamName", "Unknown")
+    home_team_name = game.get("HomeTeamName", "Unknown")
+    away_team_formation = game.get("AwayTeamFormation", "Unknown")
+    home_team_formation = game.get("HomeTeamFormation", "Unknown")
     final_score = f"{game.get('AwayTeamScore', 'N/A')}-{game.get('HomeTeamScore', 'N/A')}"
     start_time = game.get("DateTime", "Unknown")
-    channel = game.get("Channel", "Unknown")
-    
-    # Format quarters
-    quarters = game.get("Quarters", [])
-    quarter_scores = ', '.join([f"Q{q['Number']}: {q.get('AwayScore', 'N/A')}-{q.get('HomeScore', 'N/A')}" for q in quarters])
     
     if status == "Final":
         return (
             f"Game Status: {status}\n"
-            f"{away_team} vs {home_team}\n"
+            f"{away_team_name} vs {home_team_name}\n"
             f"Final Score: {final_score}\n"
             f"Start Time: {start_time}\n"
-            f"Channel: {channel}\n"
-            f"Quarter Scores: {quarter_scores}\n"
+            f"Away Team Formation: {away_team_formation}\n"
+            f"Home Team Formation: {home_team_formation}\n"
         )
     elif status == "InProgress":
         last_play = game.get("LastPlay", "N/A")
         return (
             f"Game Status: {status}\n"
-            f"{away_team} vs {home_team}\n"
+            f"{away_team_name} vs {home_team_name}\n"
             f"Current Score: {final_score}\n"
             f"Last Play: {last_play}\n"
-            f"Channel: {channel}\n"
+            f"Away Team Formation: {away_team_formation}\n"
+            f"Home Team Formation: {home_team_formation}\n"
         )
     elif status == "Scheduled":
         return (
             f"Game Status: {status}\n"
-            f"{away_team} vs {home_team}\n"
+            f"{away_team_name} vs {home_team_name}\n"
             f"Start Time: {start_time}\n"
-            f"Channel: {channel}\n"
+            f"Away Team Formation: {away_team_formation}\n"
+            f"Home Team Formation: {home_team_formation}\n"
         )
     else:
         return (
             f"Game Status: {status}\n"
-            f"{away_team} vs {home_team}\n"
+            f"{away_team_name} vs {home_team_name}\n"
             f"Details are unavailable at the moment.\n"
         )
 
@@ -55,15 +54,15 @@ def lambda_handler(event, context):
     sns_topic_arn = os.getenv("SNS_TOPIC_ARN")
     sns_client = boto3.client("sns")
     
-    # Define the fixed date (December 21st, 2024)
-    date = "2024-12-21"  # Fixed date
+    # Set the date to 12-21-2024
+    date = "2024-12-21"  # Explicit date
     
     # Define the competition (e.g., "La Liga")
     competition = "ESP"  # Change this to the desired competition (e.g., "PremierLeague")
 
     print(f"Fetching games for competition: {competition} on date: {date}")
     
-    # Fetch data from the API with the fixed date
+    # Fetch data from the API with competition and date variables
     api_url = f"https://api.sportsdata.io/v4/soccer/scores/json/GamesByDateFinal/{competition}/{date}?key={api_key}"
     print(f"API URL: {api_url}")
      
@@ -96,4 +95,4 @@ def lambda_handler(event, context):
         print(f"Error publishing to SNS: {e}")
         return {"statusCode": 500, "body": f"Error publishing to SNS: {e}"}
     
-    return {"statusCode": 200, "body": ""}
+    return {"statusCode": 200, "body": "Data processed and sent to SNS"}
